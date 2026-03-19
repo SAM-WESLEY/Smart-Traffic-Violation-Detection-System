@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart Traffic Violation Detection</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',sans-serif;background:#0a0f1e;color:#e2e8f0;min-height:100vh;}
+header{background:linear-gradient(135deg,#0d1b3e,#1a2a5e);padding:18px 28px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #1e3a6e;}
+header h1{font-size:20px;font-weight:700;}
+header p{font-size:12px;color:#7aaef5;flex:1;}
+.live{background:#14532d;color:#22c55e;border:1px solid #22c55e;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;}
+.main{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;padding:20px;max-width:1300px;margin:0 auto;}
+.video-box{background:#0d1b3e;border:1px solid #1e3a6e;border-radius:14px;overflow:hidden;}
+.video-box img{width:100%;display:block;}
+.right-panel{display:flex;flex-direction:column;gap:16px;}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.stat-card{background:#0d1b3e;border:1px solid #1e3a6e;border-radius:12px;padding:16px;text-align:center;}
+.stat-label{font-size:10px;color:#7aaef5;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+.stat-val{font-size:32px;font-weight:800;}
+.stat-val.red{color:#ef4444;}
+.stat-val.green{color:#22c55e;}
+.stat-val.orange{color:#f97316;}
+.stat-val.blue{color:#3b82f6;}
+.signal-box{background:#0d1b3e;border:1px solid #1e3a6e;border-radius:12px;padding:16px;text-align:center;}
+.signal-indicator{width:60px;height:60px;border-radius:50%;margin:0 auto 10px;border:3px solid #1e3a6e;}
+.signal-red{background:#ef4444;box-shadow:0 0 20px #ef4444;}
+.signal-green{background:#22c55e;box-shadow:0 0 20px #22c55e;}
+.chart-box{background:#0d1b3e;border:1px solid #1e3a6e;border-radius:12px;padding:16px;}
+.chart-box h3{font-size:13px;color:#7aaef5;margin-bottom:12px;}
+.log-box{background:#0d1b3e;border:1px solid #1e3a6e;border-radius:14px;padding:16px;margin:0 20px 20px;max-width:1260px;margin-left:auto;margin-right:auto;}
+.log-box h3{font-size:13px;color:#7aaef5;margin-bottom:12px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;padding:8px 12px;border-bottom:1px solid #1e3a6e;color:#7aaef5;font-size:11px;text-transform:uppercase;}
+td{padding:8px 12px;border-bottom:1px solid #0d1b3e;color:#cbd5e1;}
+tr:hover td{background:#1e3a6e22;}
+.badge-red{background:#450a0a;color:#ef4444;padding:2px 8px;border-radius:10px;font-size:11px;}
+.badge-orange{background:#431407;color:#f97316;padding:2px 8px;border-radius:10px;font-size:11px;}
+footer{text-align:center;padding:20px;color:#334155;font-size:11px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚦 Smart Traffic Violation Detection</h1>
+  <p>Real-Time AI Traffic Surveillance Dashboard</p>
+  <span class="live">LIVE</span>
+</header>
+
+<div class="main">
+  <div class="video-box">
+    <img src="/video_feed" alt="Traffic Camera Feed"/>
+  </div>
+
+  <div class="right-panel">
+    <div class="signal-box">
+      <div id="signal-dot" class="signal-indicator signal-green"></div>
+      <div style="font-size:18px;font-weight:700;" id="signal-text">GREEN</div>
+      <div style="font-size:11px;color:#7aaef5;margin-top:4px;">Traffic Signal</div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Violations</div>
+        <div class="stat-val red" id="total">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Red Light</div>
+        <div class="stat-val orange" id="red-count">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">No Helmet</div>
+        <div class="stat-val orange" id="helmet-count">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Last Plate</div>
+        <div style="font-size:16px;font-weight:700;color:#3b82f6;margin-top:6px;" id="last-plate">—</div>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <h3>Violation Trend</h3>
+      <canvas id="trendChart" height="100"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="log-box">
+  <h3>Recent Violations</h3>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Type</th><th>Plate No.</th><th>Timestamp</th></tr>
+    </thead>
+    <tbody id="log-body">
+      <tr><td colspan="4" style="text-align:center;color:#334155;">No violations yet</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<footer>Smart Traffic Violation Detection System &nbsp;|&nbsp; Sam Wesley S &nbsp;|&nbsp; Karunya Institute of Technology and Sciences</footer>
+
+<script>
+const labels = [];
+const data   = [];
+const MAX    = 20;
+
+const ctx = document.getElementById('trendChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Violations',
+      data,
+      borderColor: '#ef4444',
+      backgroundColor: 'rgba(239,68,68,0.1)',
+      borderWidth: 2,
+      tension: 0.4,
+      fill: true,
+      pointRadius: 3,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#475569' }, grid: { color: '#1e3a6e' } },
+      y: { ticks: { color: '#475569' }, grid: { color: '#1e3a6e' }, beginAtZero: true }
+    }
+  }
+});
+
+function updateStatus() {
+  fetch('/status').then(r => r.json()).then(d => {
+    document.getElementById('total').textContent       = d.total_violations;
+    document.getElementById('red-count').textContent   = d.red_light_count;
+    document.getElementById('helmet-count').textContent= d.helmet_count;
+    document.getElementById('last-plate').textContent  = d.last_plate;
+    document.getElementById('signal-text').textContent = d.signal;
+
+    const dot = document.getElementById('signal-dot');
+    dot.className = 'signal-indicator ' + (d.signal === 'RED' ? 'signal-red' : 'signal-green');
+
+    const t = new Date().toLocaleTimeString();
+    labels.push(t); data.push(d.total_violations);
+    if (labels.length > MAX) { labels.shift(); data.shift(); }
+    chart.update();
+  });
+}
+
+function updateLog() {
+  fetch('/violations').then(r => r.json()).then(rows => {
+    if (!rows.length) return;
+    const tbody = document.getElementById('log-body');
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.id}</td>
+        <td><span class="${r.type.includes('Red') ? 'badge-red' : 'badge-orange'}">${r.type}</span></td>
+        <td>${r.plate || '—'}</td>
+        <td>${r.timestamp}</td>
+      </tr>`).join('');
+  });
+}
+
+setInterval(updateStatus, 1000);
+setInterval(updateLog,    2000);
+updateStatus();
+updateLog();
+</script>
+</body>
+</html>
